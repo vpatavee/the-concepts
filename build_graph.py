@@ -1,6 +1,41 @@
 import json
 
+
+import networkx as nx
+import matplotlib.pyplot as plt
 import numpy as np
+
+
+def build_edge_list(concept_page):
+    edges_list = []
+    for page in concept_page:
+        topic_concept = []
+        for concept in concept_page[page]:
+            if concept["location"] == 'title':
+                topic_concept.append(concept['concept'])
+
+        for concept in concept_page[page]:
+            if concept["location"] == 'body':
+                for topic_con in topic_concept:
+                    if topic_con != concept['concept']:
+                        edges_list.append((topic_con, concept['concept']))
+
+        upper_concept = []
+        for i, concept in enumerate(concept_page[page]):
+            if concept["location"] == 'title':
+                continue
+
+            if concept["sub_location"] == 0:
+                upper_concept.append(concept["concept"])
+
+            if concept["sub_location"] > 0:
+                for c in upper_concept:
+                    if c != concept['concept']:
+                        edges_list.append((c, concept['concept']))
+                if i + 1 < len(concept_page[page]) and concept_page[page][i + 1]["sub_location"] == 0:
+                    upper_concept = []
+
+    return edges_list
 
 
 def build_graph(idx, pages):
@@ -86,9 +121,24 @@ def get_top_concepts(list_of_concepts, g, n):
 if __name__ == "__main__":
     idx = json.load(open("index_with_level.json", "r"))
     pages = json.load(open("concept_pages.json", "r"))
-    # template = create_template(idx, pages)
-    # with open("master", "w") as f:
-    #     json.dump(template,f)
-    #
     g, num_edge_out, num_edge_in, list_of_concepts = build_graph(idx, pages)
-    top_concept = get_top_concepts()
+    top_concept = get_top_concepts(list_of_concepts, g, 10)
+    edge_list = build_edge_list(pages)
+    G = nx.DiGraph()
+    G.add_edges_from(edge_list)
+
+    print(nx.info(G))
+    print('Density', nx.density(G))
+    print('In Degree', sorted(G.in_degree(), key=lambda x: -x[1])[0:10])
+    print('Out Degree', sorted(G.out_degree(), key=lambda x: -x[1])[0:10])
+
+    page_cen = nx.pagerank(G)
+    top_ten = sorted(page_cen.items(), key=lambda x: -x[1])[0:50]
+    for e in top_ten[0:20]:
+        print("term:", e[0], "page_rank:", e[1])
+
+    sub = [e[0] for e in top_ten]
+    H = G.subgraph(sub)
+    plt.figure(num=None, figsize=(20, 20), dpi=80)
+    nx.draw(H, node_size=1700, with_labels=True, font_size=15)
+    plt.show()
