@@ -5,6 +5,7 @@ import re
 from nltk import FreqDist, word_tokenize
 from nltk.corpus import stopwords
 from nltk.parse import stanford
+from nltk.stem import WordNetLemmatizer
 
 PATH_TO_STANFORD_PARSER = r"C:\Users\Wii\stanford-parser-full-2018-02-27\stanford-parser-full-2018-02-27"
 
@@ -21,16 +22,24 @@ def word_freq(parse_ppt):
     return FreqDist(l).most_common(20)
 
 
+def lemmatize_concept(concept):
+    lemmatizer = WordNetLemmatizer()
+    res = ""
+    for e in concept.split():
+        res += lemmatizer.lemmatize(e) + " "
+    return res.strip()
+
+
 def clean_concepts(concept):
     concept = concept.lower()
     concept = re.sub("(^\d|[:,?\"./\{}\[\]])", "", concept).strip()
     articles = set(["a", "an", "the"])
+    concept = lemmatize_concept(concept)
     concept = " ".join([e for e in concept.split() if e not in articles])
     set_of_stopwords = set(stopwords.words('english'))
     ans = []
     if not concept:
         return ans
-    concept = " ".join(concept.split())
 
     if "and" in concept:
         ans = concept.split(" and ")
@@ -95,7 +104,7 @@ def get_index(parse_ppt, parser):
 
             # Indexing
             for cleaned_concept in concept_in_sent:
-                concept_info = {"page": page["page"], "type": text["type"]}
+                concept_info = {"page": page["page"], "type": text["type"], "sentence": sent}
                 page_info = {"concept": cleaned_concept, "location": text["type"]}
                 if text["type"] == "body":
                     concept_info["level"] = text["level"]
@@ -122,4 +131,6 @@ if __name__ == "__main__":
     idx, pages = get_index(parse_ppt, parser)
     json.dump(idx, open("index_with_level.json", "w"))
     json.dump(pages, open("concept_pages.json", "w"))
+
+
 

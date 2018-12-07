@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!-- Required meta tags -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js" integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+        
+        <script src="https://www.gstatic.com/firebasejs/5.5.6/firebase.js"></script>
+        <script>
+            var config = {
+                apiKey: "AIzaSyBC30zJRx12FZRyLa4O9jEEHnZ2S4zNGC4",
+                authDomain: "concepts-80c2a.firebaseapp.com",
+                databaseURL: "https://concepts-80c2a.firebaseio.com",
+                projectId: "concepts-80c2a",
+                storageBucket: "concepts-80c2a.appspot.com",
+                messagingSenderId: "11494742937"
+            };
+
+            function onLoad() {
+                firebase.initializeApp(config);
+
+                var dbRefConcepts = firebase.database().ref("concepts");
+                var dbRefTop = firebase.database().ref("top");
+
+                var urlParams = new URLSearchParams(window.location.search);
+                var entries = urlParams.entries();
+                let concept = "";
+                for(pair of entries) { 
+                    if (pair[0] === "concept") {
+                        concept = pair[1];
+                        break;
+                    }
+                }
+                document.getElementById("concept-name").innerHTML = "<h3 class='text-center'>" + concept + "</h3>";
+
+                dbRefConcepts.child(concept).child("location").on('value', function(snapshot) { 
+                    var locationHTML = "<table class='table table-striped'>";
+                    locationHTML += "<thead><tr><td style='width:25%'>Page</td><td style='width:25%'>Position</td><td style='width:25%'>Position Level</td><td style='width:25%'>Sentence</td></tr></thead>";
+                    snapshot.forEach(function(child) { 
+                        // child.val() : {level: 0, page: 1, type: "body"}
+                        var value = child.val();
+                        locationHTML += "<tr><td>"  + value["page"] + " </td><td>" + value["type"]  + "</td><td> "+ value["level"] + " </td><td>" + value["sentence"]  + "</td></tr>";
+                    })
+                    locationHTML += "</table>"
+                    document.getElementById("location-list").innerHTML = locationHTML;
+                });
+
+                dbRefConcepts.child(concept).child("related_concepts").on('value', function(snapshot) { 
+                    var relatedConceptListHTML = "";
+                    snapshot.forEach(function(child) {
+                        relatedConceptListHTML += "<a href='./concept.html?concept=" + child.val() + "'>" + child.val() + "</a><br />";
+                    })
+                    if (relatedConceptListHTML.trim().length === 0) {
+                        relatedConceptListHTML = "No related concept found.";
+                    }
+                    document.getElementById("related-concept-list").innerHTML = relatedConceptListHTML;
+                }); 
+
+                dbRefConcepts.child(concept).child("statistics").on('value', function(snapshot) { 
+                    if (snapshot.val() == null) {
+                        document.getElementById("statistic-detail").innerHTML = "No detail";
+                    } else {
+                        document.getElementById("statistic-detail").innerHTML = snapshot.val();
+                    }
+                    document.getElementById("container").style.display = "block";
+                });  
+            }
+        
+        </script>
+    </head>
+    <body onload="onLoad()">
+        <div id="container" style="display: none;">
+            <div class="col-sm-12" id="concept-name"></div>
+            <div class="col-sm-12">
+                <div class="row">
+                    <div class="col-sm-8" class="statistic-container">
+                        <h5>Statistic</h5>
+                        <div class="col-sm-12">
+                            <div class="card">
+                                <div class="card-body" id="statistic-detail">
+                                    This is some text within a card body. <br />
+                                    This is some text within a card body. <br />
+                                    This is some text within a card body. 
+                                </div>
+                            </div>
+                        </div>
+                        <h5>Location</h5>
+                        <div class="col-sm-12">
+                            <div class="card">
+                                <div class="card-body" id="location-list">
+                                    This is some text within a card body.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4" class="related-container">
+                        <h5>Related concept</h5>
+                        <div class="col-sm-12">
+                            <div class="card">
+                                <div class="card-body" id="related-concept-list">
+                                    This is some text within a card body.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
