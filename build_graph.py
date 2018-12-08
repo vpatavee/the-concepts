@@ -6,19 +6,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def build_edge_list(concept_page):
+def build_di_edge_list(concept_page, w1=2, w2=1, w3=1):
+    """
+    :param concept_page: output from get_index()
+    :param w1 weight title -> main bullet
+    :param w2 weight title -> sub bullet
+    :param w3 weight main bullet -> sub bullet
+    :return: list of edges that can input to add_edges_from(). [(v1, v2, {'weight': w}), (), ...]
+    """
+
     edges_list = []
     for page in concept_page:
-        topic_concept = []
+        topic_concept = set()
         for concept in concept_page[page]:
             if concept["location"] == 'title':
-                topic_concept.append(concept['concept'])
-
-        for concept in concept_page[page]:
-            if concept["location"] == 'body':
-                for topic_con in topic_concept:
-                    if topic_con != concept['concept']:
-                        edges_list.append((topic_con, concept['concept']))
+                topic_concept.add(concept['concept'])
 
         upper_concept = []
         for i, concept in enumerate(concept_page[page]):
@@ -26,86 +28,52 @@ def build_edge_list(concept_page):
                 continue
 
             if concept["sub_location"] == 0:
+                # add edges from concepts in title to this concept
+                for e in topic_concept:
+                    if e != concept['concept']:
+                        edges_list.append((e, concept['concept'], {"weight": w1}))
+
                 upper_concept.append(concept["concept"])
 
             if concept["sub_location"] > 0:
+                # add edges from concept in main bullet to its sub bullet
                 for c in upper_concept:
                     if c != concept['concept']:
-                        edges_list.append((c, concept['concept']))
+                        edges_list.append((c, concept['concept'], {"weight": w2}))
+
+                # add edges from concept in title to sub bullet
+                for e in topic_concept:
+                    if e != concept['concept']:
+                        edges_list.append((e, concept['concept'], {"weight": w3}))
+
+                # If this is the last concept in sub bullet, clear the upper_concept
                 if i + 1 < len(concept_page[page]) and concept_page[page][i + 1]["sub_location"] == 0:
                     upper_concept = []
 
     return edges_list
 
 
-def build_graph(idx, pages):
-    """
-    :param idx:
-    :param pages:
-    :return:
-    [ a00 a01
-      a10 a11]
-    a01 = link from word 0 in topic to word 1 in body
-    """
-    list_of_concepts = list(idx.keys())
-    num_edge_out = [0] * len(list_of_concepts)
-    num_edge_in = [0] * len(list_of_concepts)
-    g = np.zeros((len(list_of_concepts), len(list_of_concepts)), dtype=float)
-    for i, concept in enumerate(list_of_concepts):
-        concept_info = idx[concept]
-        for p in concept_info:
-            # only consider if it is title
-            if p["type"] != "title":
-                # print p["type"]
-                continue
-
-            page = pages[str(p["page"])]
-            for concept_in_page in page:
-                concept_name = concept_in_page["concept"]
-                if concept_name == concept:
-                    continue
-                j = list_of_concepts.index(concept_name)
-                num_edge_out[i] += 1
-                num_edge_in[j] += 1
-                if "sub_location" not in concept_in_page:
-                    # print concept_in_page
-                    continue
-                if concept_in_page["sub_location"] == 0:
-                    g[i, j] += 2
-                elif concept_in_page["sub_location"] == 1:
-                    g[i, j] += 1
-                else:
-                    print "ERROR"
-    return g, num_edge_out, num_edge_in, list_of_concepts
-
-
-def get_related(list_of_concepts, g):
-    """
-    :param concepts: concepts template
-    :param g: graph represented in Numpy Array
-    :param list_of_concepts: list of concepts used to index the graph
-    :return:
-    """
+def get_related(g):
     concepts_with_related = {}
-    for i, concept in enumerate(list_of_concepts):
-        related_concepts = []
-        concepts_with_related[concept] = related_concepts
-        for j in np.argsort(g[:, i])[-4:]:
-            if g[j, i] == 0:
-                continue
-            related_concepts.append(list_of_concepts[j])
+    for v in g.nodes():
+        concepts_with_related[v] = [a for a in g.neighbors(v)]
     return concepts_with_related
 
 
-def create_template(idx_json, pages_json):
+def create_template(idx_json, g):
     concepts_master = {}
-    g, num_edges_out, num_edges_in, list_of_concepts = build_graph(idx_json, pages_json)
-    concepts_with_related = get_related(list_of_concepts, g)
+    concepts_with_related = get_related(g)
+    stat = get_stat(g)
     for concept in idx_json:
         concept_info = {}
         concept_info["location"] = idx_json[concept]
-        concept_info["related_concepts"] = concepts_with_related[concept]
-        concept_info["statistics"] = {}
+        if concept in concepts_with_related:
+            concept_info["related_concepts"] = concepts_with_related[concept]
+            concept_info["statistics"] = stat[concept]
+        else:
+            concept_info["related_concepts"] = []
+            concept_info["statistics"] = ""
+
         concepts_master[concept] = concept_info
 
     return concepts_master
@@ -118,27 +86,56 @@ def get_top_concepts(list_of_concepts, g, n):
     return top_concepts
 
 
-if __name__ == "__main__":
-    idx = json.load(open("index_with_level.json", "r"))
-    pages = json.load(open("concept_pages.json", "r"))
-    g, num_edge_out, num_edge_in, list_of_concepts = build_graph(idx, pages)
-    top_concept = get_top_concepts(list_of_concepts, g, 10)
-    edge_list = build_edge_list(pages)
+def get_stat(g):
+    stat = {}
+    page_cen = nx.pagerank(g)
+    mean = np.average([e[1] for e in page_cen.items()])
+    sd = np.std([e[1] for e in page_cen.items()])
+    for v in g.nodes():
+        if page_cen[v] > mean + sd:
+            imp = "important"
+        else:
+            imp = "not very important"
+        stat[v] = "This concept is linked from others with degree = {}.\n".format(g.in_degree[v]) + \
+            "This concept links to others with degree = {}.\n".format(g.out_degree[v]) + \
+            "This concept is {}.".format(imp)
+
+    return stat
+
+
+def create_di_graph(pages, plot=False):
+    edge_list = build_di_edge_list(pages)
     G = nx.DiGraph()
     G.add_edges_from(edge_list)
-
     print(nx.info(G))
     print('Density', nx.density(G))
     print('In Degree', sorted(G.in_degree(), key=lambda x: -x[1])[0:10])
     print('Out Degree', sorted(G.out_degree(), key=lambda x: -x[1])[0:10])
-
     page_cen = nx.pagerank(G)
     top_ten = sorted(page_cen.items(), key=lambda x: -x[1])[0:50]
     for e in top_ten[0:20]:
         print("term:", e[0], "page_rank:", e[1])
+    if plot:
+        sub = [e[0] for e in top_ten]
+        H = G.subgraph(sub)
+        plt.figure(num=None, figsize=(20, 20), dpi=80)
+        nx.draw(H, node_size=1700, with_labels=True, font_size=15)
+        plt.show()
+    return G
 
-    sub = [e[0] for e in top_ten]
-    H = G.subgraph(sub)
-    plt.figure(num=None, figsize=(20, 20), dpi=80)
-    nx.draw(H, node_size=1700, with_labels=True, font_size=15)
-    plt.show()
+
+if __name__ == "__main__":
+    idx = json.load(open("index_with_level.json", "r"))
+    pages = json.load(open("concept_pages.json", "r"))
+    g = create_di_graph(pages)
+    with open("master", "w") as f:
+        json.dump(create_template(idx, g), f)
+
+
+
+
+
+
+
+
+

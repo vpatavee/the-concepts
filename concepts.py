@@ -88,6 +88,7 @@ def get_index(parse_ppt, parser):
     for page in parse_ppt:
         for text in page["text"]:
             sent = text["text"]
+            sent = re.sub("[!()]", "", sent)
             # Skip sentence that does not contain most frequent words
             if not is_sentence_contain_words(sent, top_20):
                 continue
